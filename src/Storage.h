@@ -44,6 +44,18 @@ typedef enum
   STO_ITEM_STANDBY_MODE_TIME,       // Time until heater is turned off
   STO_ITEM_RESERVED_30,             // reserved
   STO_ITEM_RESERVED_21,             // reserved
+  STO_ITEM_PID_KP2_REGULAR,          // PID P part at pressure profiling
+  STO_ITEM_PID_TN2_REGULAR,          // PID I part at pressure profiling
+  STO_ITEM_PID_TV2_REGULAR,          // PID D part at pressure profiling
+  STO_ITEM_PREINFUSIONDIMMER,        // Power of Dimmer during Preinfusion
+  STO_ITEM_ATIME1,                   // Pressure Profiling Array
+  STO_ITEM_ATIME2,                   // Pressure Profiling Array
+  STO_ITEM_ATIME3,                   // Pressure Profiling Array
+  STO_ITEM_ATIME4,                   // Pressure Profiling Array
+  STO_ITEM_APRESSURE1,                   // Pressure Profiling Array
+  STO_ITEM_APRESSURE2,                   // Pressure Profiling Array
+  STO_ITEM_APRESSURE3,                   // Pressure Profiling Array
+  STO_ITEM_APRESSURE4,                   // Pressure Profiling Array
 
   /* WHEN ADDING NEW ITEMS, THE FOLLOWING HAS TO BE UPDATED:
    * - storage structure:  sto_data_t

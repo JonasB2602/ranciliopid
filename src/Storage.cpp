@@ -23,19 +23,28 @@ typedef struct __attribute__((packed)) {
     uint8_t reserved1[2];
     double pidTnRegular;
     uint8_t pidOn;
-    uint8_t freeToUse1;
+    double PumpPower;
     double pidTvRegular;
     double pidIMaxRegular;
-    uint8_t freeToUse2;
+    double pidKp2;
     double brewSetpoint;
     double brewTempOffset;
-    uint8_t freeToUse3;
-    double brewTimeMs;
-    uint8_t freeToUse4[2];
+    double pidTn2;
+    double brewTimeMs; // maybe one free to use remains
+    double pidTv2;
+    double weightsetpoint;
     double preInfusionTimeMs;
     uint8_t freeToUse5[2];
     double preInfusionPauseMs;
-    uint8_t freeToUse6[21];
+    uint8_t freeToUse6[13]; //adding 8 variables, not sure if I delete them from the 21
+    double atime1;
+    double atime2;
+    double atime3;
+    double atime4;
+    double apressure1;
+    double apressure2;
+    double apressure3;
+    double apressure4;
     uint8_t pidBdOn;
     double pidKpBd;
     uint8_t freeToUse7[2];
@@ -57,7 +66,6 @@ typedef struct __attribute__((packed)) {
     uint8_t freeToUse14[2];
     char wifiSSID[25 + 1];
     char wifiPassword[25 + 1];
-    double weightSetpoint;
     double steamkp;
     double steamSetpoint;
     uint8_t standbyModeOn;
@@ -70,21 +78,29 @@ static const sto_data_t itemDefaults PROGMEM = {
     {0xFF, 0xFF},                             // reserved (maybe for structure version)
     AGGTN,                                    // STO_ITEM_PID_TN_REGULAR
     0,                                        // STO_ITEM_PID_ON
-    0xFF,                                     // free to use
+    PUMPPOWER,                                // free to use
     AGGTV,                                    // STO_ITEM_PID_TV_REGULAR
     AGGIMAX,                                  // STO_ITEM_PID_I_MAX_REGULAR
-    0xFF,                                     // free to use
+    AGGKP2,                                   // free to use
     SETPOINT,                                 // STO_ITEM_BREW_SETPOINT
     TEMPOFFSET,                               // STO_ITEM_BREW_TEMP_OFFSET
-    0xFF,                                     // free to use
+    AGGTN2,                                   // free to use
     BREW_TIME,                                // STO_ITEM_BREW_TIME
-    {0xFF, 0xFF},                             // free to use
+    AGGTV2,                                   // maybe there is still one free
+    SCALE_WEIGHTSETPOINT,                     // STO_ITEM_WEIGHTSETPOINT
     PRE_INFUSION_TIME,                        // STO_ITEM_PRE_INFUSION_TIME
     {0xFF, 0xFF},                             // free to use
     PRE_INFUSION_PAUSE_TIME,                  // STO_ITEM_PRE_INFUSION_PAUSE
     {   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF },       // free to use
+    ATIME1,                                   // Array for pressure profiling. Maybe need to delete 8x 0xFF
+    ATIME2,
+    ATIME3,
+    ATIME4,
+    APRESSURE1,
+    APRESSURE2,
+    APRESSURE3,
+    APRESSURE4,
     0,                                        // STO_ITEM_USE_PID_BD
     AGGBKP,                                   // STO_ITEM_PID_KP_BD
     {0xFF, 0xFF},                             // free to use
@@ -107,7 +123,6 @@ static const sto_data_t itemDefaults PROGMEM = {
     {0xFF, 0xFF},                             // free to use
     "",                                       // STO_ITEM_WIFI_SSID
     "",                                       // STO_ITEM_WIFI_PASSWORD
-    SCALE_WEIGHTSETPOINT,                     // STO_ITEM_WEIGHTSETPOINT
     STEAMKP,                                  // STO_ITEM_PID_KP_STEAM
     STEAMSETPOINT,                            // STO_ITEM_STEAM_SETPOINT
     STANDBY_MODE_ON,                          // STO_ITEM_STANDBY_MODE_ON
@@ -233,7 +248,67 @@ static inline int32_t getItemAddr(sto_item_id_t itemId, uint16_t* maxItemSize = 
             addr = offsetof(sto_data_t, softApEnabledCheck);
             size = STRUCT_MEMBER_SIZE(sto_data_t, softApEnabledCheck);
             break;
+        
+        case STO_ITEM_PID_KP2_REGULAR:
+            addr = offsetof(sto_data_t, pidKp2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, pidKp2);
+            break;  
+            
+        case STO_ITEM_PID_TN2_REGULAR:
+            addr = offsetof(sto_data_t, pidTn2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, pidTn2);
+            break;
+            
+        case STO_ITEM_PID_TV2_REGULAR:
+            addr = offsetof(sto_data_t, pidTv2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, pidTv2);
+            break;
+         
+        case STO_ITEM_PREINFUSIONDIMMER:
+            addr = offsetof(sto_data_t, PumpPower);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, PumpPower);
+            break;  
+        
+        case STO_ITEM_ATIME1:
+            addr = offsetof(sto_data_t, atime1);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime1);
+            break;  
 
+        case STO_ITEM_ATIME2:
+            addr = offsetof(sto_data_t, atime2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime2);
+            break; 
+
+        case STO_ITEM_ATIME3:
+            addr = offsetof(sto_data_t, atime3);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime3);
+            break; 
+
+         case STO_ITEM_ATIME4:
+            addr = offsetof(sto_data_t, atime4);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime4);
+            break; 
+
+        case STO_ITEM_APRESSURE1:
+            addr = offsetof(sto_data_t, apressure1);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure1);
+            break;
+
+        case STO_ITEM_APRESSURE2:
+            addr = offsetof(sto_data_t, apressure2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure2);
+            break;
+
+        case STO_ITEM_APRESSURE3:
+            addr = offsetof(sto_data_t, apressure3);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure3);
+            break;
+
+        case STO_ITEM_APRESSURE4:
+            addr = offsetof(sto_data_t, apressure4);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure4);
+            break;
+           
         case STO_ITEM_WIFI_SSID:
             addr = offsetof(sto_data_t, wifiSSID);
             size = STRUCT_MEMBER_SIZE(sto_data_t, wifiSSID);
@@ -255,8 +330,8 @@ static inline int32_t getItemAddr(sto_item_id_t itemId, uint16_t* maxItemSize = 
             break;
 
         case STO_ITEM_WEIGHTSETPOINT:
-            addr = offsetof(sto_data_t, weightSetpoint );
-            size = STRUCT_MEMBER_SIZE(sto_data_t,weightSetpoint);
+            addr = offsetof(sto_data_t, weightsetpoint);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, weightsetpoint);
             break;
 
         case STO_ITEM_STEAM_SETPOINT:

@@ -57,6 +57,21 @@ void sendInflux() {
             influxSensor.addField("preinfusionpause", preinfusionpause);
             influxSensor.addField("preinfusion", preinfusion);
             influxSensor.addField("steamON", steamON);
+            influxSensor.addField("inputPressure", inputPressure);
+            influxSensor.addField("pressuresetPoint", pressuresetPoint);
+            influxSensor.addField("Brewtime", timeBrewed);
+            influxSensor.addField("Kp2", pressurePID.GetKp());
+            influxSensor.addField("Ki2", pressurePID.GetKi());
+            influxSensor.addField("Kd2", pressurePID.GetKd());
+            influxSensor.addField("PressurePID", pressurePID.GetMode());
+            influxSensor.addField("DimmerValue", dimmer.getPower());
+            influxSensor.addField("DimmerMode", dimmer.getMode());
+            influxSensor.addField("DimmerState", dimmer.getState());
+            influxSensor.addField("OutputDimmer", OutputDimmer);
+            influxSensor.addField("weight", weightBrew);
+            influxSensor.addField("Brewcounter", brewcounter);
+            influxSensor.addField("Weight Setpoint", weightSetpoint);
+            influxSensor.addField("Total Brewtime", totalBrewTime);
 
             byte mac[6];
             WiFi.macAddress(mac);

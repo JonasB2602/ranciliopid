@@ -33,16 +33,28 @@ int writeSysParamsToStorage(void);
 #define AGGBKP 50                  // PID Kp (brew detection phase)
 #define AGGBTN 0                   // PID Tn (brew detection phase)
 #define AGGBTV 20                  // PID Tv (brew detection phase)
-#define BREW_TIME 25               // brew time in seconds (only used if pump is being controlled)
+#define BREW_TIME 30               // brew time in seconds (only used if pump is being controlled)
 #define BREW_SW_TIME 25            // keep brew PID params for this many seconds after detection (only for software BD)
 #define BREW_PID_DELAY 10          // delay until enabling PID controller during brew (no heating during this time)
 #define BD_SENSITIVITY 120         // brew detection sensitivity, be careful: if too low, then there is the risk of wrong brew detection and rising temperature
-#define PRE_INFUSION_TIME 2        // pre-infusion time in seconds
-#define PRE_INFUSION_PAUSE_TIME 5  // pre-infusion pause time in seconds
-#define SCALE_WEIGHTSETPOINT 30    // Target weight in grams
+#define PRE_INFUSION_TIME 5        // pre-infusion time in seconds
+#define PRE_INFUSION_PAUSE_TIME 0  // pre-infusion pause time in seconds
+#define SCALE_WEIGHTSETPOINT 43    // Target weight in grams
 #define WIFI_CREDENTIALS_SAVED 0   // Flag if wifi setup is done. 0: not set up, 1: credentials set up via wifi manager
 #define STANDBY_MODE_ON 0          // Standby mode off by default
 #define STANDBY_MODE_TIME 30       // Time in minutes until the heater is turned off   
+#define AGGKP2 50                   // PID Kp (regular phase)
+#define AGGTN2 1000                  // PID Tn (regular phase)
+#define AGGTV2 2                   // PID Tv (regular phase)
+#define PUMPPOWER 30                // Pump Power during Preinfusion
+#define ATIME1 5000                 // 1. Time for Pressure SetPoint
+#define ATIME2 10000                // 2. Time for Pressure SetPoint
+#define ATIME3 15000                // 3. Time for Pressure SetPoint
+#define ATIME4 35000                // 4. Time for Pressure SetPoint
+#define APRESSURE1 3                // 1. Pressure SetPoint
+#define APRESSURE2 8                // 2. Pressure SetPoint
+#define APRESSURE3 9                // 3. Pressure SetPoint
+#define APRESSURE4 6                // 4. Pressure SetPoint
 
 // Backflush values
 #define FILLTIME 3000              // time in ms the pump is running

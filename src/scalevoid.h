@@ -6,7 +6,7 @@
 
 #pragma once
 
-#if (BREWMODE == 2 || ONLYPIDSCALE == 1)
+#if (BREWMODE == 2 || ONLYPIDSCALE == 1 || BREWMODE == 4)
 /**
  * @brief Check measured weight
  */
