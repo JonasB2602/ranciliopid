@@ -67,4 +67,5 @@ float measurePressure() {
     }
 
     return (float)ABP2_pressure;
+    previousinputPressure = ABP2_pressure;
 }

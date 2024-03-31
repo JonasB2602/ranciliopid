@@ -465,3 +465,228 @@ void brew() {
     }
 }
 #endif
+
+#if (BREWCONTROL_TYPE == 3)  // old Brew MODE
+/**
+ * @brief PreInfusion, Brew Normal
+ */
+void brew() {
+    if (OnlyPID == 0) {
+        checkbrewswitch();
+        unsigned long currentMillistemp = millis();
+
+        if (brewcounter > kBrewIdle && brewcounter < kWaitBrewOff) {
+            timeBrewed = currentMillistemp - startingTime;
+        }
+
+        if (brewswitch == LOW && brewcounter > kBrewIdle) {
+            // abort function for state machine from every state
+            brewcounter = kWaitBrewOff;
+        }
+
+        if (brewswitch == LOW && movingAverageInitialized == 0) {
+            // check if brewswitch was turned off at least once, last time,
+            brewswitchWasOFF = true;
+        }
+
+        totalbrewtime = ((preinfusion * 1000) + (preinfusionpause * 1000) +
+            (brewtime * 1000));  // running every cycle, in case changes are done during brew
+
+        // state machine for brew
+        switch (brewcounter) {
+            case 10:  // waiting step for brew switch turning on
+                if (brewswitch == HIGH && backflushState == 10 && backflushON == 0 && brewswitchWasOFF) {
+                    startingTime = millis();
+                    brewcounter = kPreinfusion;
+
+                    if (preinfusionpause == 0 || preinfusion == 0) {
+                        brewcounter = kPreinfusion;
+                    }
+
+                    coldstart = false;  // force reset kaltstart if shot is pulled
+                } else {
+                    backflush();
+                }
+
+                break;
+            case 20:  // preinfusioon
+                Serial.println("Preinfusion");
+                digitalWrite(PIN_VALVE, relayON);
+                digitalWrite(PIN_PUMP, relayON);
+                dimmer.setPower(PreinfusionDimmer);
+                brewcounter = kBrewRunning;
+
+                break;
+
+
+            case 40:  // brew running
+                Serial.println("Profiling started");
+                digitalWrite(PIN_VALVE, relayON);
+                digitalWrite(PIN_PUMP, relayON);
+                pressurePID.SetMode(AUTOMATIC);
+                pressurePID.Compute();
+                dimmer.setPower(OutputDimmer);
+                brewcounter = kWaitBrew;
+
+                break;
+
+            case 41:  // waiting time brew
+                lastbrewTime = timeBrewed;
+
+                if (timeBrewed > totalbrewtime) {
+                    brewcounter = kBrewFinished;
+                }
+
+                break;
+
+            case 42:  // brew finished
+                Serial.println("Brew stopped");
+                pressurePID.SetMode(MANUAL);
+                dimmer.setPower(0);
+                digitalWrite(PIN_VALVE, relayOFF);
+                digitalWrite(PIN_PUMP, relayOFF);
+                brewcounter = kWaitBrewOff;
+                timeBrewed = 0;
+
+                break;
+
+            case 43:  // waiting for brewswitch off position
+                if (brewswitch == LOW) {
+                    pressurePID.SetMode(MANUAL);
+                    dimmer.setPower(0);
+                    digitalWrite(PIN_VALVE, relayOFF);
+                    digitalWrite(PIN_PUMP, relayOFF);
+                    
+
+                    // disarmed button
+                    currentMillistemp = 0;
+                    brewDetected = 0;  // rearm brewdetection
+                    brewcounter = kBrewIdle;
+                    timeBrewed = 0;
+                }
+
+                break;
+        }
+    }
+}
+#endif
+
+#if (BREWCONTROL_TYPE == 4)
+/**
+ * @brief Scale brew mode
+ */
+void brew() {
+    if (OnlyPID == 0) {
+        checkbrewswitch();
+        unsigned long currentMillistemp = millis();
+
+        if (brewswitch == LOW && brewcounter > kBrewIdle) {
+            // abort function for state machine from every state
+            brewcounter = kWaitBrewOff;
+        }
+
+        if (brewcounter > kBrewIdle && brewcounter < kWaitBrewOff) {
+            timeBrewed = currentMillistemp - startingTime;
+            weightBrew = weight - weightPreBrew;
+        }
+
+        if (brewswitch == LOW && movingAverageInitialized) {
+            // check if brewswitch was turned off at least once, last time,
+            brewswitchWasOFF = true;
+        }
+
+        totalBrewTime = ((preinfusion * 1000) + (brewtime * 1000));  
+        // running every cycle, in case changes are done during brew
+
+        // state machine for brew
+        switch (brewcounter) {
+            case kBrewIdle:  // waiting step for brew switch turning on
+                if (brewswitch == HIGH && backflushState == 10 && backflushON == 0 && brewswitchWasOFF) {
+                    startingTime = millis();
+
+                    if (preinfusion == 0) {
+                        brewcounter = kBrewRunning;
+                    } else {
+                        brewcounter = kPreinfusion;
+                    }
+
+                    coldstart = false;  // force reset kaltstart if shot is pulled
+                    weightPreBrew = weight;
+                    pressuresetPoint = 0;
+                } else {
+                    backflush();
+                }
+
+                break;
+
+            case kPreinfusion:  // preinfusioon
+                debugPrintln("Preinfusion");
+                digitalWrite(PIN_VALVE, relayON);
+                digitalWrite(PIN_PUMP, relayON);
+                dimmer.setPower(PreinfusionDimmer);
+                brewcounter = kWaitPreinfusion;
+
+                break;
+
+            case kWaitPreinfusion:  // waiting time preinfusion
+                if (timeBrewed > (preinfusion * 1000)) {
+                    brewcounter = kBrewRunning;
+                }
+
+                break;
+                
+            case kBrewRunning:  // brew running
+                debugPrintln("Brew started");
+                digitalWrite(PIN_VALVE, relayON);
+                digitalWrite(PIN_PUMP, relayON);
+                dimmer.setPower(OutputDimmer);
+                pressurePID.Compute();
+                brewcounter = kWaitBrew;
+                break;
+
+            case kWaitBrew:  // waiting time brew
+                lastbrewTime = timeBrewed;
+                dimmer.setPower(OutputDimmer);
+                pressurePID.Compute();
+                if (timeBrewed > totalBrewTime || (weightBrew > (weightSetpoint - scaleDelayValue))) {
+                    brewcounter = kBrewFinished;
+                }
+
+                if (timeBrewed > totalBrewTime) {
+                    brewcounter = kBrewFinished;
+                }
+
+                break;
+
+            case kBrewFinished:  // brew finished
+                debugPrintln("Brew stopped");
+                dimmer.setPower(0);
+                digitalWrite(PIN_VALVE, relayOFF);
+                digitalWrite(PIN_PUMP, relayOFF);
+                brewcounter = kWaitBrewOff;
+                timeBrewed = 0;
+
+                break;
+
+            case kWaitBrewOff:  // waiting for brewswitch off position
+                if (brewswitch == LOW) {
+                    dimmer.setPower(0);
+                    digitalWrite(PIN_VALVE, relayOFF);
+                    digitalWrite(PIN_PUMP, relayOFF);
+
+                    // disarmed button bezugsZeitAlt = bezugsZeit;
+                    currentMillistemp = 0;
+                    brewDetected = 0;  // rearm brewdetection
+                    brewcounter = kBrewIdle;
+                    timeBrewed = 0;
+                    pressuresetPoint = 0;
+                    
+                }
+
+                weightBrew = weight - weightPreBrew;  // always calculate weight to show on display
+
+                break;
+        }
+    }
+}
+#endif

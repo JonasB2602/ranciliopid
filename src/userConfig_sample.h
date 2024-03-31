@@ -51,7 +51,7 @@ enum MACHINE {
 #define WIFICONNECTIONDELAY 10000          // delay between reconnects in ms
 
 // PID & Hardware
-#define BREWCONTROL_TYPE       0                     // 0 = off (no brewing control), 1 = Brew by time (with preinfusion), 2 = Brew by weight (from scale)
+#define BREWCONTROL_TYPE       0                     // 0 = off (no brewing control), 1 = Brew by time (with preinfusion), 2 = Brew by weight (from scale)/ 3 = dimmer without scale / 4 = dimmer with scale
 #define FEATURE_BREWDETECTION  1                     // 0 = deactivated, 1 = activated
 #define BREWDETECTION_TYPE     1                     // 1 = Software (BREWCONTROL_TYPE 0), 2 = Hardware BREWCONTROL_TYPE 1 or 2, 3 = optocoupler for BREWCONTROL_TYPE 0
 #define FEATURE_POWERSWITCH    0                     // 0 = deactivated, 1 = activated

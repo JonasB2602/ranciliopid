@@ -43,6 +43,18 @@ typedef enum {
     STO_ITEM_SCALE_KNOWN_WEIGHT,        // Calibration weight for scale
     STO_ITEM_RESERVED_30,               // reserved
     STO_ITEM_RESERVED_21,               // reserved
+    STO_ITEM_PID_KP2_REGULAR,          // PID P part at pressure profiling
+    STO_ITEM_PID_TN2_REGULAR,          // PID I part at pressure profiling
+    STO_ITEM_PID_TV2_REGULAR,          // PID D part at pressure profiling
+    STO_ITEM_PREINFUSIONDIMMER,        // Power of Dimmer during Preinfusion
+    STO_ITEM_ATIME1,                   // Pressure Profiling Array
+    STO_ITEM_ATIME2,                   // Pressure Profiling Array
+    STO_ITEM_ATIME3,                   // Pressure Profiling Array
+    STO_ITEM_ATIME4,                   // Pressure Profiling Array
+    STO_ITEM_APRESSURE1,                   // Pressure Profiling Array
+    STO_ITEM_APRESSURE2,                   // Pressure Profiling Array
+    STO_ITEM_APRESSURE3,                   // Pressure Profiling Array
+    STO_ITEM_APRESSURE4,                   // Pressure Profiling Array
 
     /* WHEN ADDING NEW ITEMS, THE FOLLOWING HAS TO BE UPDATED:
      * - storage structure:  sto_data_t
@@ -71,19 +83,28 @@ typedef struct __attribute__((packed)) {
         uint8_t reserved1[2];
         double pidTnRegular;
         uint8_t pidOn;
-        uint8_t freeToUse1;
+        double PumpPower;
         double pidTvRegular;
         double pidIMaxRegular;
-        uint8_t freeToUse2;
+        double pidKp2;
         double brewSetpoint;
         double brewTempOffset;
-        uint8_t freeToUse3;
+        double pidTn2;
         double brewTimeMs;
         float scaleCalibration;
         double preInfusionTimeMs;
         float scaleKnownWeight;
         double preInfusionPauseMs;
-        uint8_t freeToUse6[21];
+        uint8_t freeToUse6[12]; //adding 9 variables, not sure if I delete them from the 21
+        double pidTv2;
+        double atime1;
+        double atime2;
+        double atime3;
+        double atime4;
+        double apressure1;
+        double apressure2;
+        double apressure3;
+        double apressure4;
         uint8_t pidBdOn;
         double pidKpBd;
         float scale2Calibration;
@@ -118,19 +139,28 @@ static const sto_data_t itemDefaults PROGMEM = {
     {0xFF, 0xFF},                                                                                                                   // reserved (maybe for structure version)
     AGGTN,                                                                                                                          // STO_ITEM_PID_TN_REGULAR
     0,                                                                                                                              // STO_ITEM_PID_ON
-    0xFF,                                                                                                                           // free to use
+    PUMPPOWER,                                                                                                                           // free to use
     AGGTV,                                                                                                                          // STO_ITEM_PID_TV_REGULAR
     AGGIMAX,                                                                                                                        // STO_ITEM_PID_I_MAX_REGULAR
-    0xFF,                                                                                                                           // free to use
+    AGGKP2,                                                                                                                           // free to use
     SETPOINT,                                                                                                                       // STO_ITEM_BREW_SETPOINT
     TEMPOFFSET,                                                                                                                     // STO_ITEM_BREW_TEMP_OFFSET
-    0xFF,                                                                                                                           // free to use
+    AGGTN2,                                                                                                                           // free to use
     BREW_TIME,                                                                                                                      // STO_ITEM_BREW_TIME
     SCALE_CALIBRATION_FACTOR,                                                                                                       // STO_ITEM_SCALE_CALIBRATION_FACTOR
     PRE_INFUSION_TIME,                                                                                                              // STO_ITEM_PRE_INFUSION_TIME
     SCALE_KNOWN_WEIGHT,                                                                                                             // STO_ITEM_SCALE_KNOWN_WEIGHT
     PRE_INFUSION_PAUSE_TIME,                                                                                                        // STO_ITEM_PRE_INFUSION_PAUSE
-    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, // free to use
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,}, // free to use
+    AGGTV2,
+    ATIME1,                                   // Array for pressure profiling. Maybe need to delete 8x 0xFF
+    ATIME2,
+    ATIME3,
+    ATIME4,
+    APRESSURE1,
+    APRESSURE2,
+    APRESSURE3,
+    APRESSURE4,
     0,                                                                                                                              // STO_ITEM_USE_PID_BD
     AGGBKP,                                                                                                                         // STO_ITEM_PID_KP_BD
     SCALE2_CALIBRATION_FACTOR,                                                                                                      // STO_ITEM_SCALE2_CALIBRATION_FACTOR
@@ -332,6 +362,66 @@ static inline int32_t getItemAddr(sto_item_id_t itemId, uint16_t* maxItemSize = 
         case STO_ITEM_SCALE_KNOWN_WEIGHT:
             addr = offsetof(sto_data_t, scaleKnownWeight);
             size = STRUCT_MEMBER_SIZE(sto_data_t, scaleKnownWeight);
+            break;
+        
+        case STO_ITEM_PID_KP2_REGULAR:
+            addr = offsetof(sto_data_t, pidKp2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, pidKp2);
+            break;  
+            
+        case STO_ITEM_PID_TN2_REGULAR:
+            addr = offsetof(sto_data_t, pidTn2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, pidTn2);
+            break;
+            
+        case STO_ITEM_PID_TV2_REGULAR:
+            addr = offsetof(sto_data_t, pidTv2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, pidTv2);
+            break;
+         
+        case STO_ITEM_PREINFUSIONDIMMER:
+            addr = offsetof(sto_data_t, PumpPower);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, PumpPower);
+            break;  
+        
+        case STO_ITEM_ATIME1:
+            addr = offsetof(sto_data_t, atime1);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime1);
+            break;  
+
+        case STO_ITEM_ATIME2:
+            addr = offsetof(sto_data_t, atime2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime2);
+            break; 
+
+        case STO_ITEM_ATIME3:
+            addr = offsetof(sto_data_t, atime3);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime3);
+            break; 
+
+         case STO_ITEM_ATIME4:
+            addr = offsetof(sto_data_t, atime4);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, atime4);
+            break; 
+
+        case STO_ITEM_APRESSURE1:
+            addr = offsetof(sto_data_t, apressure1);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure1);
+            break;
+
+        case STO_ITEM_APRESSURE2:
+            addr = offsetof(sto_data_t, apressure2);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure2);
+            break;
+
+        case STO_ITEM_APRESSURE3:
+            addr = offsetof(sto_data_t, apressure3);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure3);
+            break;
+
+        case STO_ITEM_APRESSURE4:
+            addr = offsetof(sto_data_t, apressure4);
+            size = STRUCT_MEMBER_SIZE(sto_data_t, apressure4);
             break;
 
         default:

@@ -10,7 +10,7 @@
 #define FW_VERSION    4
 #define FW_SUBVERSION 0
 #define FW_HOTFIX     0
-#define FW_BRANCH     "MASTER"
+#define FW_BRANCH     "Profiling"
 
 // STL includes
 #include <map>
@@ -63,6 +63,10 @@ hw_timer_t* timer = NULL;
 #define SCK_DELAY              1
 #define SCK_DISABLE_INTERRUPTS 0
 #include <HX711_ADC.h>
+#endif
+
+#if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)
+#include <RBDdimmer.h>
 #endif
 
 // Version of userConfig need to match, checked by preprocessor
@@ -148,7 +152,8 @@ bool coolingFlushDetectedQM = false;
 
 // Pressure sensor
 #if (FEATURE_PRESSURESENSOR == 1)
-float inputPressure = 0;
+double previousinputPressure = 0;
+ double inputPressure;
 float inputPressureFilter = 0;
 const unsigned long intervalPressure = 100;
 unsigned long previousMillisPressure; // initialisation at the end of init()
@@ -252,6 +257,46 @@ double standbyModeTime = STANDBY_MODE_TIME;
 
 #include "standby.h"
 
+#if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)
+//Pressure PID Controller for RBH Dimmer 
+const unsigned int PressureWindowSize = 1000;
+double OutputDimmer;
+double PreinfusionDimmer = PUMPPOWER;
+double pressuresetPoint = 0;
+int i;
+
+double aggKp2 = AGGKP2;
+double aggTn2 = AGGTN2;
+double aggTv2 = AGGTV2;
+
+#if aggTn2 == 0
+    double aggKi2 = 0;
+#else
+double aggKi2 = aggKp2 / aggTn2;
+#endif
+double aggKd2 = aggTv2 * aggKp2;
+
+//Variables for Profiling Array in bar and ms
+double aTime1 = ATIME1;
+double aTime2 = ATIME2;
+double aTime3 = ATIME3;
+double aTime4 = ATIME4;
+double aPressure1 = APRESSURE1;
+double aPressure2 = APRESSURE2;
+double aPressure3 = APRESSURE3;
+double aPressure4 = APRESSURE4;
+
+//define variable setpoint
+// look-up tables for mapping readings to measurements (brewTime, pressuresetPoint)
+double theArray[10] = {
+  1, 1,
+  aTime1, aPressure1,
+  aTime2, aPressure2,
+  aTime3, aPressure3,
+  aTime4, aPressure4
+};
+#endif
+
 // system parameter EEPROM storage wrappers (current value as pointer to variable, minimum, maximum, optional storage ID)
 SysPara<uint8_t> sysParaPidOn(&pidON, 0, 1, STO_ITEM_PID_ON);
 SysPara<uint8_t> sysParaUsePonM(&usePonM, 0, 1, STO_ITEM_PID_START_PONM);
@@ -282,6 +327,18 @@ SysPara<double> sysParaStandbyModeTime(&standbyModeTime, STANDBY_MODE_TIME_MIN, 
 SysPara<float> sysParaScaleCalibration(&scaleCalibration, -100000, 100000, STO_ITEM_SCALE_CALIBRATION_FACTOR);
 SysPara<float> sysParaScale2Calibration(&scale2Calibration, -100000, 100000, STO_ITEM_SCALE2_CALIBRATION_FACTOR);
 SysPara<float> sysParaScaleKnownWeight(&scaleKnownWeight, 0, 2000, STO_ITEM_SCALE_KNOWN_WEIGHT);
+SysPara<double> sysParaPidKp2(&aggKp2, 0, 500, STO_ITEM_PID_KP2_REGULAR);
+SysPara<double> sysParaPidTn2(&aggTn2, 0, 9999, STO_ITEM_PID_TN2_REGULAR);
+SysPara<double> sysParaPidTv2(&aggTv2, 0, 999, STO_ITEM_PID_TV2_REGULAR);
+SysPara<double> sysParaPumpPower(&PreinfusionDimmer, 1, 100, STO_ITEM_PREINFUSIONDIMMER);
+SysPara<double> sysParaaTime1(&aTime1, 0, 99999, STO_ITEM_ATIME1);
+SysPara<double> sysParaaTime2(&aTime2, 0, 99999, STO_ITEM_ATIME2);
+SysPara<double> sysParaaTime3(&aTime3, 0, 99999, STO_ITEM_ATIME3);
+SysPara<double> sysParaaTime4(&aTime4, 0, 99999, STO_ITEM_ATIME4);
+SysPara<double> sysParaaPressure1(&aPressure1, 0, 99999, STO_ITEM_APRESSURE1);
+SysPara<double> sysParaaPressure2(&aPressure2, 0, 99999, STO_ITEM_APRESSURE2);
+SysPara<double> sysParaaPressure3(&aPressure3, 0, 99999, STO_ITEM_APRESSURE3);
+SysPara<double> sysParaaPressure4(&aPressure4, 0, 99999, STO_ITEM_APRESSURE4);
 
 // Other variables
 boolean coldstart = true;                     // true = Rancilio started for first time
@@ -342,6 +399,14 @@ double aggKi = aggKp / aggTn;
 double aggKd = aggTv * aggKp;
 
 PID bPID(&temperature, &pidOutput, &setpoint, aggKp, aggKi, aggKd, 1, DIRECT);
+
+// Pressure PID
+#if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)
+PID pressurePID(&inputPressure, &OutputDimmer, &pressuresetPoint, aggKp2, aggKi2, aggKd2, DIRECT);
+
+dimmerLamp dimmer(PIN_PSM, PIN_ZC);
+#endif
+
 
 #include "brewHandler.h"
 
@@ -1866,6 +1931,156 @@ void setup() {
                                           .ptr = (void*)&scale2Calibration};
 #endif
 
+#if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)
+editableVars["PID_KP2"] = {
+        .displayName = F("PID P2"),
+        .hasHelpText = true,
+        .helpText = F("P value for PID responsible for the dimmer."),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 26,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 200,
+        .ptr = (void *)&aggKp2
+    };
+
+    editableVars["PID_TN2"] = {
+        .displayName = F("PID TN2"),
+        .hasHelpText = true,
+        .helpText = F("TN value for PID responsible for the dimmer."),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 27,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 9999,
+        .ptr = (void *)&aggTn2
+    };
+
+        editableVars["PID_TV2"] = {
+        .displayName = F("PID TV2"),
+        .hasHelpText = true,
+        .helpText = F("TV value for PID responsible for the dimmer."),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 28,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 999,
+        .ptr = (void *)&aggTv2
+    };
+
+        editableVars["PUMP_POWER"] = {
+        .displayName = F("Pump Power"),
+        .hasHelpText = true,
+        .helpText = F("TV value for PID responsible for the dimmer."),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 29,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 99,
+        .ptr = (void *)&PreinfusionDimmer
+    };
+        editableVars["PROFILE_TIME1"] = {
+        .displayName = F("Profile Time1"),
+        .hasHelpText = true,
+        .helpText = F("Time for the first pressure set point"),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 30,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 99999,
+        .ptr = (void *)&aTime1
+    };
+        editableVars["PROFILE_PRESSURE1"] = {
+        .displayName = F("Profile Pressure1"),
+        .hasHelpText = true,
+        .helpText = F("First pressure set point, should be around the pressure after the PreInfusion"),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 31,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 15,
+        .ptr = (void *)&aPressure1
+    };
+        editableVars["PROFILE_TIME2"] = {
+        .displayName = F("Profile Time2"),
+        .hasHelpText = true,
+        .helpText = F("Time for the second pressure set point"),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 32,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 99999,
+        .ptr = (void *)&aTime2
+    };
+        editableVars["PROFILE_PRESSURE2"] = {
+        .displayName = F("Profile Pressure2"),
+        .hasHelpText = true,
+        .helpText = F("Second pressure set point. What should happen after Preinfusion?"),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 33,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 15,
+        .ptr = (void *)&aPressure2
+    };
+        editableVars["PROFILE_TIME3"] = {
+        .displayName = F("Profile Time3"),
+        .hasHelpText = true,
+        .helpText = F("Time for the third pressure set point"),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 34,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 99999,
+        .ptr = (void *)&aTime3
+    };
+        editableVars["PROFILE_PRESSURE3"] = {
+        .displayName = F("Profile Pressure3"),
+        .hasHelpText = true,
+        .helpText = F("Third pressure set point. Basically the aimed brew pressure."),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 35,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 15,
+        .ptr = (void *)&aPressure3
+    };
+        editableVars["PROFILE_TIME4"] = {
+        .displayName = F("Profile Time4"),
+        .hasHelpText = true,
+        .helpText = F("Final time for pressure setpoint, should be bigger than totalBrewTime"),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 36,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 99999,
+        .ptr = (void *)&aTime4
+    };
+        editableVars["PROFILE_PRESSURE4"] = {
+        .displayName = F("Profile Pressure4"),
+        .hasHelpText = true,
+        .helpText = F("Final pressure set point"),
+        .type = kDouble,
+        .section = sOtherSection,
+        .position = 37,
+        .show = [] { return true && (BREWMODE == 3 || BREWMODE == 4);},
+        .minValue = 0,
+        .maxValue = 15,
+        .ptr = (void *)&aPressure4
+    };
+    #endif
+
     editableVars["VERSION"] = {
         .displayName = F("Version"), .hasHelpText = false, .helpText = "", .type = kCString, .section = sOtherSection, .position = 33, .show = [] { return false; }, .minValue = 0, .maxValue = 1, .ptr = (void*)sysVersion};
     // when adding parameters, set EDITABLE_VARS_LEN to max of .position
@@ -2007,6 +2222,12 @@ void setup() {
     delay(2000); // caused crash with wifi manager on esp8266, should be ok on esp32
 #endif
 
+// Init RBD Dimmer
+#if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)
+    pinMode(PIN_PSM, OUTPUT);
+    pinMode(PIN_ZC, INPUT);
+#endif
+
     // Fallback offline
     if (connectmode == 1) { // WiFi Mode
         wiFiSetup();
@@ -2043,6 +2264,19 @@ void setup() {
     bPID.SetIntegratorLimits(0, AGGIMAX);
     bPID.SetSmoothingFactor(EMA_FACTOR);
     bPID.SetMode(AUTOMATIC);
+
+#if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)
+    // Initialize pressuePID   
+    pressurePID.SetSampleTime(PressureWindowSize);
+    pressurePID.SetOutputLimits(0, 100);
+    pressurePID.SetIntegratorLimits(0, 99);
+    pressurePID.SetSmoothingFactor(EMA_FACTOR);
+    pressurePID.SetMode(AUTOMATIC);
+    
+    // Initialize dimmer    
+    dimmer.begin(NORMAL_MODE, ON); //dimmer initialisation: name.begin(MODE, STATE)
+    dimmer.setPower(0); // setPower is calculated during brew
+    #endif
 
     if (TEMP_SENSOR == 1) {
         tempSensor = new TempSensorDallas(PIN_TEMPSENSOR);
@@ -2147,7 +2381,9 @@ void looppid() {
     refreshTemp();       // update temperature values
     testEmergencyStop(); // test if temp is too high
     bPID.Compute();      // the variable pidOutput now has new values from PID (will be written to heater pin in ISR.cpp)
-
+#if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)    
+    pressurePID.Compute();
+#endif
     if ((millis() - lastTempEvent) > tempEventInterval) {
         // send temperatures to website endpoint
         sendTempEvent(temperature, brewSetpoint, pidOutput / 10); // pidOutput is promill, so /10 to get percent value
@@ -2343,6 +2579,34 @@ void looppid() {
         bPID.SetTunings(aggbKp, aggbKi, aggbKd, 1);
     }
     // sensor error OR Emergency Stop
+    #if (BREWCONTROL_TYPE == 3 || BREWCONTROL_TYPE == 4)
+    aggKp2;
+    #if aggTn2 == 0
+    double aggKi2 = 0;
+    #else
+    double aggKi2 = aggKp2 / aggTn2;
+    #endif
+    double aggKd2 = aggTv2 * aggKp2;
+    
+    pressurePID.SetTunings(aggKp2, aggKi2, aggKd2);
+
+    double theArray[10] = {
+    1, 1,
+    aTime1, aPressure1,
+    aTime2, aPressure2,
+    aTime3, aPressure3,
+    aTime4, aPressure4
+    };
+
+    // Pressure profiling
+    for (int i = 0; i < 10-2; i += 2) {
+       if ( (timeBrewed >= theArray[i])  &&  (timeBrewed < theArray[i+2]) )
+            {
+            pressuresetPoint = theArray[i+1] + (((theArray[i+3] - theArray[i+1]) * ( (float) timeBrewed - theArray[i] ) ) / (theArray[i+2] - theArray[i] ) );
+            break;
+            }
+        }
+    #endif    
 }
 
 void loopLED() {
@@ -2513,6 +2777,18 @@ int readSysParamsFromStorage(void) {
     if (sysParaScaleCalibration.getStorage() != 0) return -1;
     if (sysParaScale2Calibration.getStorage() != 0) return -1;
     if (sysParaScaleKnownWeight.getStorage() != 0) return -1;
+    if (sysParaPidKp2.getStorage() != 0) return -1;
+    if (sysParaPidTn2.getStorage() != 0) return -1;
+    if (sysParaPidTv2.getStorage() != 0) return -1;
+    if (sysParaPumpPower.getStorage() != 0) return -1;
+    if (sysParaaTime1.getStorage() != 0) return -1;
+    if (sysParaaTime2.getStorage() != 0) return -1;
+    if (sysParaaTime3.getStorage() != 0) return -1;
+    if (sysParaaTime4.getStorage() != 0) return -1;
+    if (sysParaaPressure1.getStorage() != 0) return -1;
+    if (sysParaaPressure2.getStorage() != 0) return -1;
+    if (sysParaaPressure3.getStorage() != 0) return -1;
+    if (sysParaaPressure4.getStorage() != 0) return -1;
 
     return 0;
 }
@@ -2552,6 +2828,18 @@ int writeSysParamsToStorage(void) {
     if (sysParaScaleCalibration.setStorage() != 0) return -1;
     if (sysParaScale2Calibration.setStorage() != 0) return -1;
     if (sysParaScaleKnownWeight.setStorage() != 0) return -1;
+    if (sysParaPidKp2.setStorage() != 0) return -1;
+    if (sysParaPidTn2.setStorage() != 0) return -1;
+    if (sysParaPidTv2.setStorage() != 0) return -1;
+    if (sysParaPumpPower.setStorage() != 0) return -1;
+    if (sysParaaTime1.setStorage() != 0) return -1;
+    if (sysParaaTime2.setStorage() != 0) return -1;
+    if (sysParaaTime3.setStorage() != 0) return -1;
+    if (sysParaaTime4.setStorage() != 0) return -1;
+    if (sysParaaPressure1.setStorage() != 0) return -1;
+    if (sysParaaPressure2.setStorage() != 0) return -1;
+    if (sysParaaPressure3.setStorage() != 0) return -1;
+    if (sysParaaPressure4.setStorage() != 0) return -1;
 
     return storageCommit();
 }
